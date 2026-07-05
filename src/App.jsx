@@ -57,6 +57,8 @@ const RACINES = [
   { key: "veux_pas", label: "Je ne veux pas vraiment" },
 ];
 
+const NEEDS_FOLLOWUP = ["Validé", "Délai 24-72h imposé", "Reporté (sur place)"];
+
 const NON_COLOR = "#6B5D45";
 const CREAM = "#FFFBF2";
 const TEXT_DARK = "#2B2418";
@@ -164,6 +166,7 @@ export default function FiltreDecisionnel() {
       decision: decisionLabel,
       gain,
       racine: racineLabel,
+      suivi: NEEDS_FOLLOWUP.includes(decisionLabel) ? null : "n/a",
     };
     await persist([entry, ...entries]);
     setSavedFlash(true);
@@ -175,10 +178,14 @@ export default function FiltreDecisionnel() {
     await persist(entries.filter((e) => e.id !== id));
   }
 
+  async function markSuivi(id, value) {
+    await persist(entries.map((e) => (e.id === id ? { ...e, suivi: value } : e)));
+  }
+
   function exportCSV() {
-    const header = "Date,Heure,Categorie,Situation,Emotion,Score,Zone,Decision,Gain,Racine";
+    const header = "Date,Heure,Categorie,Situation,Emotion,Score,Zone,Decision,Gain,Racine,Suivi";
     const rows = entries.map((e) =>
-      [e.date, e.heure, e.categorie, e.situation, e.emotion, e.score, e.zone, e.decision, e.gain, e.racine]
+      [e.date, e.heure, e.categorie, e.situation, e.emotion, e.score, e.zone, e.decision, e.gain, e.racine, e.suivi]
         .map((v) => `"${String(v || "").replace(/"/g, '""')}"`)
         .join(",")
     );
@@ -195,9 +202,9 @@ export default function FiltreDecisionnel() {
   }
 
   async function copyCSV() {
-    const header = "Date | Heure | Categorie | Situation | Emotion | Score | Zone | Decision | Gain | Racine";
+    const header = "Date | Heure | Categorie | Situation | Emotion | Score | Zone | Decision | Gain | Racine | Suivi";
     const rows = entries.map((e) =>
-      [e.date, e.heure, e.categorie, e.situation, e.emotion, e.score, e.zone, e.decision, e.gain, e.racine].join(" | ")
+      [e.date, e.heure, e.categorie, e.situation, e.emotion, e.score, e.zone, e.decision, e.gain, e.racine, e.suivi].join(" | ")
     );
     const text = [header, ...rows].join("\n");
     try {
@@ -264,6 +271,44 @@ export default function FiltreDecisionnel() {
       </div>
 
       <div className="px-5 pt-5 space-y-4 max-w-md mx-auto">
+        {(() => {
+          const pending = entries.filter(
+            (e) => NEEDS_FOLLOWUP.includes(e.decision) && (e.suivi === null || e.suivi === undefined)
+          );
+          if (pending.length === 0) return null;
+          return (
+            <div className="rounded-2xl p-4 space-y-3" style={{ background: "#F3E6C8", border: "2px solid #B9872E" }}>
+              <p className="text-sm font-bold font-sans flex items-center gap-2" style={{ color: "#8A5E1E" }}>
+                <Clock size={16} /> {pending.length} décision{pending.length > 1 ? "s" : ""} en attente de confirmation
+              </p>
+              <div className="space-y-2">
+                {pending.map((e) => (
+                  <div key={e.id} className="rounded-xl px-3.5 py-3" style={{ background: CREAM, border: "1px solid #E3D6AD" }}>
+                    <p className="text-xs mb-0.5" style={{ color: TEXT_MUTED }}>{e.date} · {e.decision}</p>
+                    <p className="text-sm font-medium mb-2" style={{ color: TEXT_DARK }}>{e.situation}</p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => markSuivi(e.id, "fait")}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold font-sans"
+                        style={{ background: "#2F7A50", color: "#FFFBF2" }}
+                      >
+                        <Check size={13} strokeWidth={3} /> Fait
+                      </button>
+                      <button
+                        onClick={() => markSuivi(e.id, "pas_fait")}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold font-sans"
+                        style={{ background: NON_COLOR, color: "#FFFBF2" }}
+                      >
+                        <X size={13} strokeWidth={3} /> Pas fait
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         <input
           type="text"
           value={situation}
@@ -589,6 +634,11 @@ export default function FiltreDecisionnel() {
                     </span>
                     {e.categorie && <span>{e.categorie}</span>}
                     {e.racine && <span style={{ color: e.racine.includes("sain") ? "#2F7A50" : "#C97C1F" }}>· {e.racine}</span>}
+                    {e.suivi === "fait" && <span style={{ color: "#2F7A50" }}>✓ fait</span>}
+                    {e.suivi === "pas_fait" && <span style={{ color: "#B23A31" }}>✗ pas fait</span>}
+                    {(e.suivi === null || e.suivi === undefined) && NEEDS_FOLLOWUP.includes(e.decision) && (
+                      <span style={{ color: "#B9872E" }}>⏳ à confirmer</span>
+                    )}
                   </div>
                   <p className="text-sm truncate" style={{ color: TEXT_DARK }}>{e.situation}</p>
                   <p className="text-xs mt-0.5" style={{ color: TEXT_MUTED }}>
